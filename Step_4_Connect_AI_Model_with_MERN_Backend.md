@@ -1,356 +1,537 @@
-# Steps to Initialise AI Assistance in Your Project
+# Steps to Initialise AI Assistance in Your MERN Project
 
-## Step 4 — Connect the AI Model with the MERN Backend
+## Step 4 — Connect a Real AI Model with the MERN Backend
 
-Step 3 mein humne OpenAI project, API key aur backend configuration setup kiya tha.
+At this stage, the Fixkar AI Assistant has a working frontend and backend structure. We first experimented with a mock AI response so that the complete application flow could be developed and tested without depending on a paid AI API.
 
-Ab hum actual AI integration start karenge.
+After that initial testing, we connected the backend with the **Gemini API** so the assistant can generate real AI responses.
 
-Is step ka goal hai:
+> **Current implementation uses Gemini. OpenAI is not the active AI provider in the current implementation.**
+
+---
+
+## 4.1 What We Are Building
+
+The goal is to move from predefined responses to a real AI-powered assistant.
+
+### Earlier development flow
 
 ```text
-Select AI Model
+User Message
       ↓
-Add Model to .env
+Fixkar Backend
       ↓
-Install OpenAI SDK
+Mock AI / Predefined Responses
       ↓
-Configure AI Service
+Response
       ↓
-Send First AI Request
-      ↓
-Receive AI Response
+Frontend
 ```
 
-Is step mein abhi chatbot UI, RAG, memory, tools ya AI Agent implement nahi karenge.
+This was useful for developing and testing the chatbot UI and API flow, but it could not genuinely understand different user questions.
+
+### Current flow
+
+```text
+User Message
+      ↓
+Fixkar Frontend
+      ↓
+Axios
+      ↓
+POST /api/ai/chat
+      ↓
+AI Controller
+      ↓
+AI Service
+      ↓
+Gemini API
+      ↓
+Gemini Model
+      ↓
+AI Response
+      ↓
+Frontend Chat
+```
+
+The assistant can now generate responses instead of selecting only from predefined mock responses.
 
 ---
 
-### 4.1 AI Model Select Karein
+## 4.2 Why We Started With Mock AI
 
-AI model select karte waqt sirf sabse powerful model choose karna zaroori nahi hota.
+During development, using a mock response system first allowed us to build the complete application flow without immediately depending on an external AI provider.
 
-Model select karte waqt mainly ye factors consider karein:
+The mock system helped us test:
 
-- Intelligence
-- Response speed
-- Cost
-- Expected number of requests
-- Application ka complexity level
+- Chat UI
+- Backend AI route
+- Controller
+- AI service structure
+- Axios communication
+- Loading state
+- Error handling
+- Displaying AI responses
 
-Fixkar ke initial AI Assistant ke liye hum ek cost-efficient model se start kar sakte hain.
+Once this flow was working correctly, we replaced the mock response generation with a real AI model.
 
-Development aur learning phase mein lightweight model use karna practical hota hai. Baad mein application ki requirement ke according model change kiya ja sakta hai.
-
-OpenAI API Platform ke models section mein available models aur unki current capabilities/pricing check karein.
+The mock AI is therefore a **development/testing stage**, not the final AI implementation.
 
 ---
 
-### 4.2 Selected Model ko `.env` Mein Add Karein
+## 4.3 Select the Gemini Model
 
-Model select karne ke baad uska exact model identifier copy karein.
+For the current implementation, we use a Gemini Flash model suitable for fast application responses and future AI-assistant development.
 
-Backend ke `.env` file mein:
-
-```env
-AI_API_KEY=your_secret_api_key
-AI_MODEL=your_selected_model_id
-```
+The selected model is configured through an environment variable instead of being hard-coded inside the service.
 
 Example:
 
 ```env
-AI_API_KEY=sk-xxxxxxxxxxxxxxxx
-AI_MODEL=your_selected_model_id
+GEMINI_MODEL=gemini-3.7-flash
 ```
 
-Yahan `your_selected_model_id` ko OpenAI Platform par selected model ke exact identifier se replace karein.
+Keeping the model name in `.env` makes it easier to change the model later without changing the service code.
 
-Model ID manually guess na karein.
+> Model availability, free-tier limits, and pricing can change. Always verify the currently available model and limits in the official Gemini documentation before deploying to production.
 
 ---
 
-### 4.3 OpenAI Node.js SDK Install Karein
+## 4.4 Create the Gemini API Key
 
-Ab Fixkar ke backend folder mein terminal open karein.
+The Gemini API key is created through Google AI Studio.
 
-Run:
+General process:
+
+```text
+Google AI Studio
+      ↓
+API Keys
+      ↓
+Create API Key
+      ↓
+Copy API Key
+      ↓
+Fixkar Backend .env
+```
+
+The API key must remain on the backend.
+
+Never expose it inside React code or commit it to GitHub.
+
+---
+
+## 4.5 Store Gemini Credentials in `.env`
+
+Add the Gemini credentials to the backend `.env` file:
+
+```env
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.7-flash
+```
+
+The real API key replaces `your_gemini_api_key`.
+
+Make sure `.env` is included in `.gitignore`:
+
+```gitignore
+.env
+```
+
+The important security rule is:
+
+```text
+React Frontend
+      ↓
+Fixkar Backend
+      ↓
+Gemini API
+```
+
+Not:
+
+```text
+React Frontend
+      ↓
+Gemini API directly
+```
+
+---
+
+## 4.6 Install the Gemini Node.js SDK
+
+Inside the Fixkar backend, install Google's current JavaScript/Node.js GenAI SDK:
 
 ```bash
-npm install openai
+npm install @google/genai
 ```
 
-Ye official OpenAI Node.js SDK ko project mein install karega.
-
-Installation ke baad `package.json` mein `openai` dependency add ho jayegi.
+This SDK is used by the backend to communicate with the Gemini API.
 
 ---
 
-### 4.4 AI Configuration File Check Karein
+## 4.7 Configure the Gemini Client
 
-Humne previous step mein:
+Keep the Gemini client configuration separate from the main AI service.
 
-```text
-backend/
-└── config/
-    └── ai.config.js
-```
-
-create kiya tha.
-
-Is file ka purpose `.env` se AI-related configuration ko read karke application ke baaki AI code ko provide karna hai.
-
-Basic configuration:
-
-```js
-const aiConfig = {
-  apiKey: process.env.AI_API_KEY,
-  model: process.env.AI_MODEL,
-};
-
-export default aiConfig;
-```
-
-Isse API key aur model hard-code karne ki zarurat nahi padti.
-
----
-
-### 4.5 `ai.service.js` Mein AI Integration Karein
-
-Ab:
+Example structure:
 
 ```text
-backend/
-└── services/
+Ai_Assistant/
+│
+├── AiControllers/
+│   └── ai.controller.js
+│
+├── AiRoutes/
+│   └── ai.routes.js
+│
+└── AiServices/
+    ├── ai.config.js
     └── ai.service.js
 ```
 
-open karein.
+The configuration file initializes the Gemini client using the API key from `.env`.
 
-Is file mein OpenAI SDK import karke client create kiya jayega.
+Example:
 
-Service ka main purpose:
+```js
+import { GoogleGenAI } from "@google/genai";
 
-> Application se message lena, AI provider ko request bhejna aur AI ka response return karna.
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
+export default ai;
+```
+
+The API key is therefore never hard-coded into the source code.
+
+---
+
+## 4.8 Connect Gemini in `ai.service.js`
+
+The AI service is responsible for sending the user's message to Gemini and returning the generated text.
 
 Basic flow:
 
 ```text
 User Message
       ↓
-AI Service
-      ↓
-OpenAI Client
-      ↓
-Selected AI Model
-      ↓
-AI Response
-      ↓
-AI Service
-```
-
-Service mein ek function rakha ja sakta hai:
-
-```text
 generateAIResponse(message)
+      ↓
+Gemini Client
+      ↓
+Selected Gemini Model
+      ↓
+Generated Text
 ```
 
-Ye function:
-
-1. User ka message receive karega.
-2. Configured OpenAI client ko request bhejega.
-3. Selected model ko use karega.
-4. AI response receive karega.
-5. Useful response text return karega.
-
-Example implementation concept:
+A basic implementation is:
 
 ```js
-import OpenAI from "openai";
-import aiConfig from "../config/ai.config.js";
-
-const client = new OpenAI({
-  apiKey: aiConfig.apiKey,
-});
+import ai from "./ai.config.js";
 
 export const generateAIResponse = async (message) => {
-  const response = await client.responses.create({
-    model: aiConfig.model,
-    input: message,
+  const response = await ai.models.generateContent({
+    model: process.env.GEMINI_MODEL,
+    contents: message,
   });
 
-  return response.output_text;
+  return response.text;
 };
 ```
 
-Abhi is function ko route ya frontend se connect karna zaroori nahi hai.
-
-Pehle service level par verify karna hai ki OpenAI API successfully response de rahi hai.
+At this stage, this is intentionally simple. We are first verifying that real AI communication works before adding advanced features.
 
 ---
 
-### 4.6 Why `ai.service.js`?
+## 4.9 Keep the Controller Simple
 
-AI provider ka code controller mein directly likhne ke bajay service mein rakhne ka benefit hai.
+The controller receives the message from the frontend and passes it to the AI service.
 
-Without service layer:
-
-```text
-Route
-  ↓
-Controller
-  ↓
-OpenAI API
-```
-
-With service layer:
+The basic flow is:
 
 ```text
-Route
-  ↓
-Controller
-  ↓
-AI Service
-  ↓
-OpenAI API
-```
-
-Is architecture se future mein:
-
-- Model change karna
-- Prompt logic add karna
-- Error handling
-- Memory
-- RAG
-- Tools
-- Multiple AI providers
-
-jaise features manage karna easier hoga.
-
----
-
-### 4.7 First AI Request ka Concept
-
-Abhi hum sirf ek simple message test karenge.
-
-Example:
-
-```text
-Hello, what is Fixkar?
-```
-
-Expected flow:
-
-```text
-"Hello, what is Fixkar?"
-          ↓
-generateAIResponse()
-          ↓
-OpenAI API
-          ↓
-Selected Model
-          ↓
-AI Response
-```
-
-Example response:
-
-```text
-Fixkar is a platform that connects customers
-with service professionals.
-```
-
-Response ka exact text model ke according different ho sakta hai.
-
----
-
-### 4.8 Is Step Mein Kya Complete Hona Chahiye?
-
-Step complete hone ke baad:
-
-```text
-[✓] AI model selected
-[✓] Model ID .env mein added
-[✓] OpenAI SDK installed
-[✓] ai.config.js configured
-[✓] ai.service.js created/configured
-[✓] OpenAI client initialized
-[✓] First AI request tested
-[✓] AI response received
-```
-
----
-
-### 4.9 Current Architecture
-
-Ab Fixkar ka initial AI backend flow:
-
-```text
-React
-  ↓
-Future AI Route
-  ↓
+HTTP Request
+      ↓
 AI Controller
-  ↓
-AI Service
-  ↓
-OpenAI SDK
-  ↓
-Selected AI Model
-  ↓
-AI Response
+      ↓
+generateAIResponse(message)
+      ↓
+Gemini
+      ↓
+Reply
 ```
 
-Abhi frontend se AI request nahi bhej rahe hain.
+Example controller response:
 
-Pehle backend-to-AI communication successfully verify karna priority hai.
+```js
+return res.status(200).json({
+  success: true,
+  reply,
+});
+```
+
+The controller does not contain Gemini-specific logic. That logic stays inside `ai.service.js`.
 
 ---
 
-## Important
+## 4.10 Connect the Frontend with Axios
 
-Is step ke baad bhi humne abhi:
+The Fixkar AI frontend sends the user's message to the backend using Axios.
 
-```text
-Chat UI            ❌
-Conversation Memory ❌
-RAG                ❌
-Vector Database    ❌
-Function Calling   ❌
-AI Tools           ❌
-AI Agent           ❌
+Example request:
+
+```js
+await axios.post(
+  `${import.meta.env.VITE_API_URL}/api/ai/chat`,
+  {
+    message: trimmedMessage,
+  }
+);
 ```
 
-implement nahi kiya hai.
+The frontend does not communicate directly with Gemini.
 
-Ye features baad ke steps mein gradually add honge.
+The request flow is:
+
+```text
+Fixkar AI Chat UI
+      ↓
+Axios
+      ↓
+POST /api/ai/chat
+      ↓
+Fixkar Backend
+      ↓
+Gemini
+```
 
 ---
 
-## Next Step
+## 4.11 Display the Gemini Response
 
-Next step mein hum `ai.routes.js` aur `ai.controller.js` ko configure karenge.
+The backend returns the generated response:
 
-Tab actual backend API banegi:
-
-```text
-POST /api/ai/chat
+```json
+{
+  "success": true,
+  "reply": "Generated response from Gemini"
+}
 ```
 
-Aur flow hoga:
+The frontend reads the reply and adds it to the chat messages.
 
 ```text
-React
-  ↓
-POST /api/ai/chat
-  ↓
-AI Controller
-  ↓
-AI Service
-  ↓
-OpenAI
-  ↓
-AI Response
-  ↓
-React
+Gemini Response
+      ↓
+Axios Response
+      ↓
+setMessages()
+      ↓
+Chat Bubble
+      ↓
+User
 ```
+
+This completes the basic real-AI chat loop.
+
+---
+
+## 4.12 Handle Temporary Gemini Errors
+
+While testing the Gemini API, temporary `503` availability errors can occur when the selected model is experiencing high demand.
+
+For temporary availability or rate-limit errors, the service can retry the request with a short exponential backoff.
+
+Conceptually:
+
+```text
+Request
+   ↓
+Gemini
+   ↓
+Temporary 503 / 429
+   ↓
+Wait
+   ↓
+Retry
+   ↓
+Success
+```
+
+Retries should be limited. The application should never retry indefinitely.
+
+---
+
+## 4.13 What We Have Completed So Far
+
+The current implementation has reached this stage:
+
+```text
+[✓] Separate AI feature branch created
+[✓] Separate AI backend structure created
+[✓] AI controller created
+[✓] AI route created
+[✓] AI service created
+[✓] Mock AI created for initial testing
+[✓] Frontend AI Assistant UI created
+[✓] Frontend connected to backend with Axios
+[✓] Mock response displayed in chat
+[✓] Gemini API key configured in backend
+[✓] Gemini Node.js SDK installed
+[✓] Gemini client configured
+[✓] Gemini model configured through .env
+[✓] Real Gemini response connected to the AI service
+[✓] Gemini response displayed in the Fixkar AI chat
+[✓] Temporary API availability errors handled with limited retries
+```
+
+---
+
+## 4.14 What the AI Can Do Right Now
+
+At the current stage, Gemini can understand natural-language messages and generate dynamic responses.
+
+For example, users can ask different questions instead of receiving only predefined mock responses.
+
+However, the AI **does not yet have access to Fixkar's MongoDB data or application actions**.
+
+For example, if a user asks:
+
+```text
+What is the status of my booking?
+```
+
+Gemini currently cannot look up the user's actual booking from MongoDB.
+
+Similarly, if a user asks:
+
+```text
+Find me an electrician near Varanasi.
+```
+
+Gemini cannot yet query Fixkar professionals and return real matching professionals.
+
+These capabilities are intentionally being implemented next.
+
+---
+
+## 4.15 Current Limitation
+
+The current architecture is:
+
+```text
+User
+ ↓
+Fixkar AI
+ ↓
+Gemini
+ ↓
+Text Response
+ ↓
+User
+```
+
+The target architecture is:
+
+```text
+User
+ ↓
+Gemini
+ ↓
+Understand Intent
+ ↓
+Choose an Allowed Tool
+ ↓
+Fixkar Backend
+ ↓
+MongoDB / Application Data
+ ↓
+Tool Result
+ ↓
+Gemini
+ ↓
+Natural Language Response
+ ↓
+User
+```
+
+The second architecture is what will make Fixkar AI genuinely useful as a platform assistant.
+
+---
+
+## 4.16 What We Will Implement Next
+
+The next stage is **not another AI provider integration**.
+
+We will improve the existing Gemini integration by giving the AI knowledge about Fixkar and controlled access to useful platform operations.
+
+The planned sequence is:
+
+```text
+Current
+  ↓
+Gemini generates responses
+  ↓
+Fixkar-specific system instructions
+  ↓
+Intent understanding
+  ↓
+Tool / Function Calling
+  ↓
+Backend AI Tools
+  ↓
+MongoDB data access
+  ↓
+Real Fixkar information
+  ↓
+Conversation memory
+  ↓
+RAG for Fixkar documentation
+```
+
+### Examples of future tools
+
+```text
+searchProfessionals()
+getProfessionalDetails()
+getServices()
+getUserBookings()
+getBookingStatus()
+getPaymentStatus()
+```
+
+The AI will **not receive direct unrestricted access to MongoDB**. Instead, it will call controlled backend functions that validate requests and return only the required data.
+
+---
+
+## Important Architecture Rule
+
+The AI model should not directly access the database.
+
+Use:
+
+```text
+Gemini
+   ↓
+Approved Backend Tool
+   ↓
+Validation
+   ↓
+MongoDB
+   ↓
+Safe Result
+   ↓
+Gemini
+```
+
+This keeps the AI integration secure, maintainable, and easier to control.
+
+---
+
+## Final Status
+
+At this point, Fixkar has moved from a **mock chatbot** to a **real Gemini-powered AI Assistant**.
+
+The current goal is no longer to create another basic chatbot. The next goal is to make the assistant understand what the user wants and safely interact with Fixkar's real application data and features.
